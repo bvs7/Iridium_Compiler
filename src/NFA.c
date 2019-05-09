@@ -1,3 +1,5 @@
+#include "NFA.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -5,17 +7,6 @@
 #define SYM_LEN 40
 #define BITS (sizeof(unsigned long)*8)
 #define NODES_LEN_INIT 10
-
-typedef struct NFA NFA;
-typedef struct Node Node;
-typedef struct Path Path;
-typedef struct PathList PathList;
-typedef struct NFA_State NFA_State;
-
-typedef struct NFA{
-  Node *start;
-  PathList *ends;
-}NFA;
 
 typedef struct Path{
   Node *dest;
@@ -33,33 +24,15 @@ typedef struct PathList{
   PathList *next;
 }PathList;
 
-typedef struct NFA_State{
-  NFA nfa;
-  Node **nodes;
-  size_t nodes_len;
-  int total_nodes;
-  unsigned long *flags;
-}NFA_State;
-
 void NFA_appendNode(NFA *nfa, Node *n);
-NFA NFA_matchSym(char sym[]);
-NFA NFA_repetition(NFA nfa);
-NFA NFA_addition(NFA nfa);
-NFA NFA_option(NFA nfa);
-NFA NFA_concatenation(NFA nfa, NFA concat);
-NFA NFA_alternation(NFA nfa, NFA alt);
 void concatPathList(PathList *pl1, PathList *pl2);
 void freeNFA(NFA nfa);
 void freeNode(Node *n);
-NFA_State NFA_finish(NFA nfa);
 void explore(NFA_State *s, Node *n);
 void setFlag(unsigned long *flags, unsigned long i);
 unsigned long getFlag(unsigned long *flags, unsigned long i);
 void closure(NFA_State *s);
 void close(NFA_State *s, Node *n);
-void step(NFA_State *s, char c);
-int accept(NFA_State *s);
-int dead(NFA_State *s);
 int matchPath(Path *p, char c);
 
 void NFA_appendNode(NFA *nfa, Node *n){
@@ -165,8 +138,8 @@ NFA_State NFA_finish(NFA nfa){
   accept->id = 0;
   s.nodes[0] = accept;
   s.total_nodes++;
-
-  s.flags = calloc(sizeof(unsigned long), (s.total_nodes/BITS)+1);
+  s.flags_len = (s.total_nodes/BITS)+1;
+  s.flags = calloc(sizeof(unsigned long), s.flags_len);
   setFlag(s.flags, s.nfa.start->id);
   closure(&s);
   return s;
@@ -202,7 +175,7 @@ unsigned long getFlag(unsigned long *flags, unsigned long i){
 
 void closure(NFA_State *s){
   unsigned long index;
-  for(index=0; index< (s->total_nodes/BITS)+1; index++){
+  for(index=0; index<s->flags_len; index++){
     if(s->flags[index]){
       int bit;
       for(bit=0; bit < BITS; bit++){
@@ -227,7 +200,7 @@ void close(NFA_State *s, Node *n){
 }
 
 void step(NFA_State *s, char c){
-  unsigned long *nextflags = calloc(sizeof(long), (s->total_nodes/BITS)+1);
+  unsigned long *nextflags = calloc(sizeof(long), s->flags_len);
   unsigned long n_id;
   for(n_id=0; n_id < s->total_nodes; n_id++){
     if(getFlag(s->flags, n_id)){
@@ -250,8 +223,8 @@ int accept(NFA_State *s){
 
 int dead(NFA_State *s){
   int i;
-  for(i=0; i < (s->total_nodes/BITS)+1; i++){
-    if(s->flags != 0){
+  for(i=0; i<s->flags_len; i++){
+    if(s->flags[i] != 0){
       return 0;
     }
   }
@@ -275,4 +248,15 @@ int matchPath(Path *p, char c){
     }
   }
   return 0;
+}
+
+void freeNFA_State(NFA_State *s){
+  freeNFA(s->nfa);
+  free(s->nodes);
+  free(s->flags);
+}
+
+void reset(NFA_State *s){
+  memset(s->flags, 0UL, s->flags_len);
+  setFlag(s->flags, 1);
 }
